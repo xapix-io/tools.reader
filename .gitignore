@@ -11,3 +11,4 @@
 .lein-plugins
 .DS_Store
 .nvmrc
+.nrepl-port

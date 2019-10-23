@@ -12,10 +12,11 @@
   (:refer-clojure :exclude [read read-string char default-data-readers])
   (:require [clojure.tools.reader.reader-types :refer
              [read-char unread peek-char indexing-reader?
-              get-line-number get-column-number get-file-name string-push-back-reader]]
+              get-line-number get-column-number get-file-name string-push-back-reader indexing-push-back-reader]]
             [clojure.tools.reader.impl.utils :refer
-             [char ex-info? whitespace? numeric? desugar-meta namespace-keys second']]
-            [clojure.tools.reader.impl.commons :refer :all]
+             [char ex-info? whitespace? numeric? desugar-meta namespace-keys]]
+            [clojure.tools.reader.impl.commons :refer
+             [read-comment read-past match-number parse-symbol throwing-reader number-literal?]]
             [clojure.tools.reader.impl.errors :as err]
             [clojure.tools.reader :refer [default-data-readers]])
   (:import (clojure.lang PersistentHashSet IMeta RT PersistentVector)))
@@ -52,14 +53,20 @@
 
       :else
       (loop [sb (StringBuilder.)
-             ch (do (unread rdr initch) initch)]
+             ch (do (unread rdr initch) initch)
+             pe (when (indexing-reader? rdr)
+                  {:line (get-line-number rdr)
+                   :column (get-column-number rdr)})]
         (if (or (whitespace? ch)
                 (macro-terminating? ch)
                 (nil? ch))
-          (str sb)
+          [(str sb) pe]
           (if (not-constituent? ch)
             (err/throw-bad-char rdr kind ch)
-            (recur (doto sb (.append (read-char rdr))) (peek-char rdr))))))))
+            (let [pe (when (indexing-reader? rdr)
+                       {:line (get-line-number rdr)
+                        :column (get-column-number rdr)})]
+              (recur (.append sb (read-char rdr)) (peek-char rdr) pe))))))))
 
 
 
@@ -76,7 +83,7 @@
     (err/throw-eof-at-dispatch rdr)))
 
 (defn- read-unmatched-delimiter
-  [rdr ch opts]
+  [rdr ch _opts]
   (err/throw-unmatch-delimiter rdr ch))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -122,14 +129,14 @@
 (def ^:private ^:const lower-limit (int \uE000))
 
 (defn- read-char*
-  [rdr backslash opts]
+  [rdr _backslash _opts]
   (let [ch (read-char rdr)]
     (if-not (nil? ch)
-      (let [token (if (or (macro-terminating? ch)
-                          (not-constituent? ch)
-                          (whitespace? ch))
-                    (str ch)
-                    (read-token rdr :character ch false))
+      (let [[token _] (if (or (macro-terminating? ch)
+                              (not-constituent? ch)
+                              (whitespace? ch))
+                        (str ch)
+                        (read-token rdr :character ch false))
             token-len (count token)]
         (cond
 
@@ -204,7 +211,7 @@
     (RT/map l)))
 
 (defn- read-number
-  [rdr initch opts]
+  [rdr initch _opts]
   (loop [sb (doto (StringBuilder.) (.append initch))
          ch (read-char rdr)]
     (if (or (whitespace? ch) (macros ch) (nil? ch))
@@ -215,7 +222,7 @@
       (recur (doto sb (.append ch)) (read-char rdr)))))
 
 
-(defn- escape-char [sb rdr]
+(defn- escape-char [_sb rdr]
   (let [ch (read-char rdr)]
     (case ch
       \t "\t"
@@ -237,7 +244,7 @@
         (err/throw-bad-escape-char rdr ch)))))
 
 (defn- read-string*
-  [rdr _ opts]
+  [rdr _initch _opts]
   (loop [sb (StringBuilder.)
          ch (read-char rdr)]
     (case ch
@@ -248,8 +255,8 @@
       (recur (doto sb (.append ch)) (read-char rdr)))))
 
 (defn- read-symbol
-  [rdr initch]
-  (when-let [token (read-token rdr :symbol initch)]
+  [rdr initch {:keys [source-position start-position]}]
+  (when-let [[token end-position] (read-token rdr :symbol initch)]
     (case token
 
       ;; special symbols
@@ -259,14 +266,17 @@
       "/" '/
 
       (or (when-let [p (parse-symbol token)]
-            (symbol (p 0) (p 1)))
+            (with-meta (symbol (p 0) (p 1))
+              (when source-position
+                {:start start-position
+                 :end end-position})))
           (err/throw-invalid rdr :symbol token)))))
 
 (defn- read-keyword
-  [reader initch opts]
+  [reader _initch _opts]
   (let [ch (read-char reader)]
     (if-not (whitespace? ch)
-      (let [token (read-token reader :keyword ch)
+      (let [[token _] (read-token reader :keyword ch)
             s (parse-symbol token)]
         (if (and s (== -1 (.indexOf token "::")))
           (let [^String ns (s 0)
@@ -276,11 +286,6 @@
               (keyword ns name)))
           (err/throw-invalid reader :keyword token)))
       (err/throw-single-colon reader))))
-
-(defn- wrapping-reader
-  [sym]
-  (fn [rdr _ opts]
-    (list sym (read rdr true nil opts))))
 
 (defn- read-meta
   [rdr _ opts]
@@ -294,17 +299,17 @@
         (err/throw-bad-metadata-target rdr o)))))
 
 (defn- read-set
-  [rdr _ opts]
+  [rdr _initch opts]
   (PersistentHashSet/createWithCheck (read-delimited :set \} rdr opts)))
 
 (defn- read-discard
-  [rdr _ opts]
+  [rdr _initch _opts]
   (doto rdr
     (read true nil true)))
 
 (defn- read-namespaced-map
-  [rdr _ opts]
-  (let [token (read-token rdr :namespaced-map (read-char rdr))]
+  [rdr _initch opts]
+  (let [[token _] (read-token rdr :namespaced-map (read-char rdr))]
     (if-let [ns (some-> token parse-symbol second)]
       (let [ch (read-past whitespace? rdr)]
         (if (identical? ch \{)
@@ -353,7 +358,7 @@
     \# read-symbolic-value
     nil))
 
-(defn- read-tagged [rdr initch opts]
+(defn- read-tagged [rdr _initch opts]
   (let [tag (read rdr true nil opts)
         object (read rdr true nil opts)]
     (if-not (symbol? tag)
@@ -382,7 +387,7 @@
 
    opts is a map that can include the following keys:
    :eof - value to return on end-of-file. When not supplied, eof throws an exception.
-   :readers  - a map of tag symbols to data-reader functions to be considered before default-data-readers.
+   :readers - A map of tag symbols to data-reader functions to be considered before default-data-readers.
               When not supplied, only the default-data-readers will be used.
    :default - A function of two args, that will, if present and no reader is found for a tag,
               be called with the tag and the value."
@@ -391,10 +396,15 @@
   ([{:keys [eof] :as opts} reader]
      (let [eof-error? (not (contains? opts :eof))]
        (read reader eof-error? eof opts)))
-  ([reader eof-error? eof opts]
+  ([reader eof-error? eof {:keys [source-position]
+                           :or {source-position false}
+                           :as opts}]
      (try
        (loop []
-         (let [ch (read-char reader)]
+         (let [start-position (when (and source-position (indexing-reader? reader))
+                                {:line (get-line-number reader)
+                                 :column (get-column-number reader)})
+               ch (read-char reader)]
            (cond
             (whitespace? ch) (recur)
             (nil? ch) (if eof-error? (err/throw-eof-error reader nil) eof)
@@ -405,7 +415,7 @@
                         (if (identical? res reader)
                           (recur)
                           res))
-                      (read-symbol reader ch))))))
+                      (read-symbol reader ch (assoc opts :start-position start-position)))))))
        (catch Exception e
          (if (ex-info? e)
            (let [d (ex-data e)]
@@ -414,14 +424,14 @@
                (throw (ex-info (.getMessage e)
                                (merge {:type :reader-exception}
                                       d
-                                      (if (indexing-reader? reader)
+                                      (when (indexing-reader? reader)
                                         {:line   (get-line-number reader)
                                          :column (get-column-number reader)
                                          :file   (get-file-name reader)}))
                                e))))
            (throw (ex-info (.getMessage e)
                            (merge {:type :reader-exception}
-                                  (if (indexing-reader? reader)
+                                  (when (indexing-reader? reader)
                                     {:line   (get-line-number reader)
                                      :column (get-column-number reader)
                                      :file   (get-file-name reader)}))
@@ -439,3 +449,21 @@
   ([opts s]
      (when (and s (not (identical? s "")))
        (read opts (string-push-back-reader s)))))
+
+(comment
+
+  (defn read-all [st]
+    (let [rdr (indexing-push-back-reader st)]
+      (letfn [(lazy-read []
+                (lazy-seq
+                 (let [item (read {:eof ::eof :source-position true} rdr)]
+                   (when-not (= item ::eof)
+                     (cons item (lazy-read))))))]
+        (lazy-read))))
+
+  (let [syms (read-all "foo bar
+baz 10")]
+    (map meta syms))
+
+
+  )
