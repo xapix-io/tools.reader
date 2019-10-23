@@ -1,0 +1,42 @@
+{:deps {}
+ :paths ["src/main/clojure" "src/main/cljs"]
+ :aliases
+ {:1.5 {:override-deps {org.clojure/clojure {:mvn/version "1.5.1"}}}
+  :1.6 {:override-deps {org.clojure/clojure {:mvn/version "1.6.0"}}}
+  :1.7 {:override-deps {org.clojure/clojure {:mvn/version "1.7.0"}}}
+  :1.8 {:override-deps {org.clojure/clojure {:mvn/version "1.8.0"}}}
+  :1.9 {:override-deps {org.clojure/clojure {:mvn/version "1.9.0"}}}
+  :1.10 {:override-deps {org.clojure/clojure {:mvn/version "1.10.1"}}}
+  :test {:extra-paths ["src/test/clojure" "src/test/cljs"]}
+  :kaocha {:extra-deps {lambdaisland/kaocha {:mvn/version "0.0-554"}
+                        lambdaisland/kaocha-cljs {:mvn/version "0.0-59"}}
+           :main-opts ["-m" "kaocha.runner"]}
+  :cljs {:extra-deps {org.clojure/clojurescript {:mvn/version "1.10.520"}}}
+  :cljs-dev
+  {:main-opts
+   ["-m" "cljs.main"
+    "-o" "target/dev/main.js"
+    "-d" "target/dev/out"
+    "-O" "simple"
+    "-c" "cljs.tools.reader"]}
+  :cljs-whitespace
+  {:main-opts
+   ["-m" "cljs.main"
+    "-o" "target/test/tests-whitespace.js"
+    "-d" "target/test/out-whitespace"
+    "-O" "whitespace"
+    "-c" "cljs.tools.reader"]}
+  :cljs-simple
+  {:main-opts
+   ["-m" "cljs.main"
+    "-o" "target/test/tests-simple.js"
+    "-d" "target/test/out-simple"
+    "-O" "simple"
+    "-c" "cljs.tools.test-runner"]}
+  :cljs-advanced
+  {:main-opts
+   ["-m" "cljs.main"
+    "-o" "target/test/tests-advanced.js"
+    "-d" "target/test/out-advanced"
+    "-O" "advanced"
+    "-c" "cljs.tools.test-runner"]}}}
