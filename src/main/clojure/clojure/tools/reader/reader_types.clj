@@ -103,7 +103,7 @@
       (.close ^Closeable rdr))))
 
 (deftype IndexingPushbackReader
-    [rdr ^:unsynchronized-mutable ^long line ^:unsynchronized-mutable ^long column
+    [^PushbackReader rdr ^:unsynchronized-mutable ^long line ^:unsynchronized-mutable ^long column
      ^:unsynchronized-mutable line-start? ^:unsynchronized-mutable prev
      ^:unsynchronized-mutable ^long prev-column file-name
      ^:unsynchronized-mutable normalize?]

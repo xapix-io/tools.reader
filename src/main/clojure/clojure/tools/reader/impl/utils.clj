@@ -14,13 +14,13 @@
     (clojure.core/char x)))
 
 (def <=clojure-1-7-alpha5
-  (let [{:keys [minor qualifier]} *clojure-version*]
+  (let [{:keys [^long minor qualifier]} *clojure-version*]
     (or (< minor 7)
         (and (= minor 7)
              (= "alpha"
                 (when qualifier
                   (subs qualifier 0 (dec (count qualifier)))))
-             (<= (read-string (subs qualifier (dec (count qualifier))))
+             (<= ^long (read-string (subs qualifier (dec (count qualifier))))
                 5)))))
 
 (defmacro compile-when [cond & then]

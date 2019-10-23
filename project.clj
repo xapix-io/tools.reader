@@ -15,8 +15,8 @@
              :1.8 {:dependencies [[org.clojure/clojure "1.8.0"]]}
              :1.9 {:dependencies [[org.clojure/clojure "1.9.0"]]}
              :1.10 {:dependencies [[org.clojure/clojure "1.10.1"]]}}
-  :aliases {"test-all" ["with-profile" "test,1.5:test,1.6:test,1.7:test,1.8:test,1.9:test,1.10" "test"]
-            "check-all" ["with-profile" "1.5:1.6:1.7:1.8:1.9" "check"]}
+  :aliases {"test-all" ["with-profile" "test,1.7:test,1.8:test,1.9:test,1.10" "test"]
+            "check-all" ["with-profile" "1.7:1.8:1.9" "check"]}
   :min-lein-version "2.0.0"
   :global-vars {*warn-on-reflection* true
                 *unchecked-math* :warn-on-boxed}

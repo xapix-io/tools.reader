@@ -132,11 +132,11 @@
   [rdr _backslash _opts]
   (let [ch (read-char rdr)]
     (if-not (nil? ch)
-      (let [[token _] (if (or (macro-terminating? ch)
-                              (not-constituent? ch)
-                              (whitespace? ch))
-                        [(str ch) nil]
-                        (read-token rdr :character ch false))
+      (let [[^String token _] (if (or (macro-terminating? ch)
+                                      (not-constituent? ch)
+                                      (whitespace? ch))
+                                [(str ch) nil]
+                                (read-token rdr :character ch false))
             token-len (count token)]
         (cond
 
@@ -276,7 +276,7 @@
   [reader _initch _opts]
   (let [ch (read-char reader)]
     (if-not (whitespace? ch)
-      (let [[token _] (read-token reader :keyword ch)
+      (let [[^String token _] (read-token reader :keyword ch)
             s (parse-symbol token)]
         (if (and s (== -1 (.indexOf token "::")))
           (let [^String ns (s 0)
