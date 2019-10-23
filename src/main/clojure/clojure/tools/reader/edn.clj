@@ -135,7 +135,7 @@
       (let [[token _] (if (or (macro-terminating? ch)
                               (not-constituent? ch)
                               (whitespace? ch))
-                        (str ch)
+                        [(str ch) nil]
                         (read-token rdr :character ch false))
             token-len (count token)]
         (cond
