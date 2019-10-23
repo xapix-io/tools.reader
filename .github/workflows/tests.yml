@@ -15,6 +15,6 @@ jobs:
         tools-deps: latest
         leiningen: latest
     - name: Run tests with kaocha
-      run: clj -A:1.10:test:kaocha
+      run: clojure -A:1.10:test:kaocha
     - name: Run tests with leiningen
       run: lein test-all
