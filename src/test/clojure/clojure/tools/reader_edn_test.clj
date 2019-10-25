@@ -39,30 +39,16 @@
   (letfn [(edn-read [st]
             (read {:source-position true :eof nil}
                   (indexing-push-back-reader st)))]
-    (is (= {:start {:line 1 :column 1}
-            :end {:line 1 :column 3}}
-           (select-keys (meta (edn-read "foo")) [:start :end])))
+    (is (= {:line 1 :column 1 :name "foo" :ns nil :file nil}
+           (meta (edn-read "foo"))))
 
-    (is (= {:start {:line 1 :column 3}
-            :end {:line 1 :column 5}}
-           (select-keys (meta (edn-read "  foo  ")) [:start :end])))
+    (is (= {:line 1 :column 3 :name "foo" :ns nil :file nil}
+           (meta (edn-read "  foo  "))))
 
-    (is (= [{:start {:line 1
-                     :column 2}
-             :end {:line 1
-                   :column 8}}
-            {:start {:line 1
-                     :column 11}
-             :end {:line 1
-                   :column 12}}
-            {:start {:line 1
-                     :column 15}
-             :end {:line 1
-                   :column 15}}
-            {:start {:line 2
-                     :column 47}
-             :end {:line 2
-                   :column 47}}]
+    (is (= [{:line 1 :column 2 :file nil :name "bar" :ns "foo"}
+            {:line 1 :column 11 :file nil :name "fn" :ns nil}
+            {:line 1 :column 15 :file nil :name "x" :ns nil}
+            {:line 2 :column 47 :file nil :name "+" :ns nil}]
            (let [all-meta (atom [])]
              (prewalk (fn [x]
                         (when (symbol? x)

@@ -53,20 +53,14 @@
 
       :else
       (loop [sb (StringBuilder.)
-             ch (do (unread rdr initch) initch)
-             pe (when (indexing-reader? rdr)
-                  {:line (get-line-number rdr)
-                   :column (get-column-number rdr)})]
+             ch (do (unread rdr initch) initch)]
         (if (or (whitespace? ch)
                 (macro-terminating? ch)
                 (nil? ch))
-          [(str sb) pe]
+          (str sb)
           (if (not-constituent? ch)
             (err/throw-bad-char rdr kind ch)
-            (let [pe (when (indexing-reader? rdr)
-                       {:line (get-line-number rdr)
-                        :column (get-column-number rdr)})]
-              (recur (.append sb (read-char rdr)) (peek-char rdr) pe))))))))
+            (recur (.append sb (read-char rdr)) (peek-char rdr))))))))
 
 
 
@@ -132,11 +126,11 @@
   [rdr _backslash _opts]
   (let [ch (read-char rdr)]
     (if-not (nil? ch)
-      (let [[^String token _] (if (or (macro-terminating? ch)
-                                      (not-constituent? ch)
-                                      (whitespace? ch))
-                                [(str ch) nil]
-                                (read-token rdr :character ch false))
+      (let [^String token (if (or (macro-terminating? ch)
+                                  (not-constituent? ch)
+                                  (whitespace? ch))
+                            (str ch)
+                            (read-token rdr :character ch false))
             token-len (count token)]
         (cond
 
@@ -255,8 +249,8 @@
       (recur (doto sb (.append ch)) (read-char rdr)))))
 
 (defn- read-symbol
-  [rdr initch {:keys [source-position start-position]}]
-  (when-let [[token end-position] (read-token rdr :symbol initch)]
+  [rdr initch source-position]
+  (when-let [token (read-token rdr :symbol initch)]
     (case token
 
       ;; special symbols
@@ -267,16 +261,14 @@
 
       (or (when-let [p (parse-symbol token)]
             (with-meta (symbol (p 0) (p 1))
-              (when source-position
-                {:start start-position
-                 :end end-position})))
+              (some-> source-position (merge {:name (p 1) :ns (p 0)}))))
           (err/throw-invalid rdr :symbol token)))))
 
 (defn- read-keyword
   [reader _initch _opts]
   (let [ch (read-char reader)]
     (if-not (whitespace? ch)
-      (let [[^String token _] (read-token reader :keyword ch)
+      (let [^String token (read-token reader :keyword ch)
             s (parse-symbol token)]
         (if (and s (== -1 (.indexOf token "::")))
           (let [^String ns (s 0)
@@ -309,7 +301,7 @@
 
 (defn- read-namespaced-map
   [rdr _initch opts]
-  (let [[token _] (read-token rdr :namespaced-map (read-char rdr))]
+  (let [token (read-token rdr :namespaced-map (read-char rdr))]
     (if-let [ns (some-> token parse-symbol second)]
       (let [ch (read-past whitespace? rdr)]
         (if (identical? ch \{)
@@ -401,9 +393,10 @@
                            :as opts}]
      (try
        (loop []
-         (let [start-position (when (and source-position (indexing-reader? reader))
-                                {:line (get-line-number reader)
-                                 :column (get-column-number reader)})
+         (let [source-position (when (and source-position (indexing-reader? reader))
+                                 {:line (get-line-number reader)
+                                  :column (get-column-number reader)
+                                  :file (get-file-name reader)})
                ch (read-char reader)]
            (cond
             (whitespace? ch) (recur)
@@ -415,7 +408,7 @@
                         (if (identical? res reader)
                           (recur)
                           res))
-                      (read-symbol reader ch (assoc opts :start-position start-position)))))))
+                      (read-symbol reader ch source-position))))))
        (catch Exception e
          (if (ex-info? e)
            (let [d (ex-data e)]
